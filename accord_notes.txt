@@ -1,0 +1,7 @@
+Accord rules whether two parties' independently committed terms describe the same agreement, before it is acted on.
+
+Two agents can exchange messages and still have agreed to different things: one meant per unit, the other per batch. The failure is not a lie but a meeting of the minds nobody checked for.
+
+propose_terms(title, terms) opens an accord with party A's statement. counter_terms(accord_id, terms) commits party B's statement; B must be a different address from A. reconcile(accord_id) is open to anybody: a GenLayer round reads both statements and returns AGREE / CONFLICT / UNCLEAR. AGREE only when they correspond on every material term.
+
+Each statement is its sender's own bytes, so neither can speak for the other or force a verdict: consensus issues it from the two committed statements. The contract fetches nothing, and an instruction hidden in a statement is not evidence; proven on a real round in both directions, so no injection can manufacture agreement or break a real one.

@@ -1,0 +1,9 @@
+{
+  "name": "accord",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A GenLayer primitive that rules whether two parties' independently committed terms describe the same agreement, before it is acted on.",
+  "scripts": { "deploy": "node scripts/deploy.mjs", "prove": "node scripts/prove.mjs" },
+  "dependencies": { "ethers": "^6", "genlayer-js": "1.1.8" }
+}

@@ -57,7 +57,7 @@ async function write(who, fn, args) {
 async function openAccord(aTerms) {
   const n = (await read('size')).total;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    await write(padv, 'propose_terms', [TITLE, aTerms]);
+    await write(padv, 'propose_terms', [TITLE, aTerms, ppub.addr]);
     for (let i = 0; i < 40; i++) { const s = await read('size'); if (s.total > n) return String(s.total - 1); await sleep(8000); }
   }
   throw new Error('accord not opened');

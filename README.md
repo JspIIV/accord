@@ -8,8 +8,8 @@ Each party commits, in its own transaction, its own statement of the terms it be
 
 ## How it works
 
-1. **`propose_terms(title, terms)`** — party A opens an accord with its own statement of the terms. Bound to `gl.message.sender_address`.
-2. **`counter_terms(accord_id, terms)`** — party B commits its own statement. Bound to the caller, **who must be a different address from A**.
+1. **`propose_terms(title, terms, counterparty)`** — party A opens an accord with its own statement and **names the counterparty address** who may answer. Bound to `gl.message.sender_address`.
+2. **`counter_terms(accord_id, terms)`** — party B commits its own statement. **Only the counterparty the opener named may call this**; no other address can take the slot.
 3. **`reconcile(accord_id)`** — open to anybody. A GenLayer round reads both statements and returns `AGREE` / `CONFLICT` / `UNCLEAR`. `AGREE` marks the accord `MATCHED`, `CONFLICT` marks it `DIVERGENT`, both terminal; `UNCLEAR` leaves it open.
 4. **`record(address)`** — accords opened, countered, and ended matched or divergent.
 
@@ -17,7 +17,7 @@ Reads: `get(id)`, `status(id)`, `page(start, count)`, `size()`.
 
 ## Provenance and the un-gameable gate
 
-Each statement is that party's own bytes, in that party's own transaction, so neither party can speak for the other and nothing can be attributed to a party that did not commit it. The two parties must be different addresses. **The contract fetches nothing from the web**, so there is no page to forge. Neither party **can force a verdict**: neither decides it, which is issued by consensus from the two committed statements, and a statement that merely says "I agree" without the terms does not make them match. A reconciled accord is terminal, and every reconciliation is kept, append-only.
+Each statement is that party's own bytes, in that party's own transaction, so neither party can speak for the other and nothing can be attributed to a party that did not commit it. **The opener names the counterparty, and only that address may commit party B's terms, so the slot cannot be taken by an arbitrary address.** **The contract fetches nothing from the web**, so there is no page to forge. Neither party **can force a verdict**: neither decides it, which is issued by consensus from the two committed statements, and a statement that merely says "I agree" without the terms does not make them match. A reconciled accord is terminal. The exact reconciliation count is always kept; the log itself is a **bounded recent-history log** of the most recent reconciliations (the last 60).
 
 ## Hostile content, both directions
 
@@ -29,12 +29,12 @@ Whether two prose statements describe the same agreement on every material term 
 
 ## Tests
 
-`python tests/accord_rules.py` — the rules exercised through the real `propose_terms()`, `counter_terms()` and `reconcile()` on an Accord built against a stub of the runtime, with only the verdict controlled. It proves provenance by construction (each statement is its sender's, the parties must differ), that `AGREE` matches and `CONFLICT` diverges, that `UNCLEAR` leaves an accord open, that a settled accord is not re-judged, that both parties are credited, and the hostile-content cases. 29 checks.
+`python tests/accord_rules.py` — the rules exercised through the real `propose_terms()`, `counter_terms()` and `reconcile()` on an Accord built against a stub of the runtime, with only the verdict controlled. It proves provenance by construction (each statement is its sender's, the parties must differ), that `AGREE` matches and `CONFLICT` diverges, that `UNCLEAR` leaves an accord open, that a settled accord is not re-judged, that both parties are credited, and the hostile-content cases. 32 checks.
 
 ## Live
 
-- **Contract (GenLayer Asimov):** `0x64911cFAAe5799cD68A97B85845FED0F8A65B4Ce`
-- Explorer: https://explorer-asimov.genlayer.com/address/0x64911cFAAe5799cD68A97B85845FED0F8A65B4Ce
+- **Contract (GenLayer Asimov):** `0xd905e29107CdbA5a408A4C3D765D6Dcb4C5aB645`
+- Explorer: https://explorer-asimov.genlayer.com/address/0xd905e29107CdbA5a408A4C3D765D6Dcb4C5aB645
 
 ## Proven on Asimov
 

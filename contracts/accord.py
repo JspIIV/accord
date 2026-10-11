@@ -15,9 +15,11 @@ ruling is a gate to put before execution, decided by consensus rather than by ei
 
 Provenance is settled by construction. Each statement is that party's own bytes, in that party's
 own transaction, so neither can speak for the other and nothing can be attributed to a party that
-did not commit it. The two parties must be different addresses. The contract fetches nothing from
-the web, so there is no page to forge, and an instruction hidden inside a statement is not
-evidence: the round is told to judge the terms, not to obey either side.
+did not commit it. The opener names the counterparty when it opens the accord, and only that
+address may commit party B's terms, so the counterparty slot cannot be taken by an arbitrary
+address. The contract fetches nothing from the web, so there is no page to forge, and an
+instruction hidden inside a statement is not evidence: the round is told to judge the terms, not to
+obey either side.
 
 ## What it settles, per reconciliation
 
@@ -31,8 +33,9 @@ committed statements, never self-granted, and "I agree" without the terms does n
 ## What it refuses
 
 Each party's terms are fixed when committed and cannot be edited. Party A is bound to the caller of
-propose_terms, party B to the caller of counter_terms, and B must not be A. A reconciled accord is
-settled and cannot be re-judged. Every reconciliation is kept, append-only.
+propose_terms, party B to the caller of counter_terms, who must be the counterparty the opener
+named. A reconciled accord is settled and cannot be re-judged. Reconciliations are kept in a
+bounded log of the most recent ones (the last MAX_LOG, 60), newest last.
 
 ## Where it stops, plainly
 
@@ -161,7 +164,7 @@ Reply with bare JSON and nothing else:
 class Accord(gl.Contract):
     """Prospective agreements, each MATCHED only when both parties' own committed terms describe the same deal."""
 
-    # str(id) -> accord JSON, including its append-only reconciliation log.
+    # str(id) -> accord JSON, including a bounded log of its most recent reconciliations.
     items: TreeMap[str, str]
     ids: DynArray[str]
     # address -> {"opened": n, "countered": n, "matched": n, "divergent": n} as JSON.
@@ -180,15 +183,23 @@ class Accord(gl.Contract):
         self.records[who] = json.dumps(rec)
 
     @gl.public.write
-    def propose_terms(self, title: str, terms: str) -> str:
-        """Open an accord with your own statement of the terms. Bound to the caller, party A."""
+    def propose_terms(self, title: str, terms: str, counterparty: str) -> str:
+        """Open an accord with your terms and name the counterparty who may answer. Bound to the caller, party A.
+
+        Only the named counterparty, and no other address, can later commit party B's terms.
+        """
         party_a = gl.message.sender_address.as_hex.lower()
         ttl = _clip(title, MAX_TITLE)
         body = _clip(terms, MAX_TERMS)
+        designated = _addr(counterparty)
         if not ttl:
             return json.dumps({"ok": False, "error": "give the agreement a short title"})
         if len(body) < 12:
             return json.dumps({"ok": False, "error": "state your terms: what you believe you are agreeing to"})
+        if not designated:
+            return json.dumps({"ok": False, "error": "name the counterparty's address (the only party B who may answer)"})
+        if designated == party_a:
+            return json.dumps({"ok": False, "error": "the counterparty must be a different address from you"})
 
         aid = str(len(self.ids))
         record = {
@@ -197,6 +208,7 @@ class Accord(gl.Contract):
             "party_a": party_a,
             "terms_a": body,
             "opened_at": _now_iso(),
+            "counterparty": designated,
             "party_b": "",
             "terms_b": "",
             "countered_at": "",
@@ -209,11 +221,11 @@ class Accord(gl.Contract):
         self.items[aid] = json.dumps(record)
         self.ids.append(aid)
         self._bump(party_a, 1, 0, 0, 0)
-        return json.dumps({"ok": True, "id": aid, "status": AWAITING})
+        return json.dumps({"ok": True, "id": aid, "status": AWAITING, "counterparty": designated})
 
     @gl.public.write
     def counter_terms(self, accord_id: str, terms: str) -> str:
-        """Commit your own statement of the terms for an open accord. Bound to the caller, party B, who must not be A."""
+        """Commit party B's terms for an open accord. Only the counterparty the opener named may call this."""
         party_b = gl.message.sender_address.as_hex.lower()
         aid = str(accord_id).strip()
         stored = self.items.get(aid, None)
@@ -222,8 +234,8 @@ class Accord(gl.Contract):
         record = json.loads(stored)
         if record["status"] != AWAITING:
             return json.dumps({"ok": False, "error": "this accord already has both parties' terms"})
-        if party_b == record["party_a"]:
-            return json.dumps({"ok": False, "error": "the counterparty must be a different address from party A"})
+        if party_b != record.get("counterparty", ""):
+            return json.dumps({"ok": False, "error": "only the counterparty named by the opener can answer this accord"})
         body = _clip(terms, MAX_TERMS)
         if len(body) < 12:
             return json.dumps({"ok": False, "error": "state your terms: what you believe you are agreeing to"})
@@ -290,6 +302,8 @@ class Accord(gl.Contract):
         record["reconciliations"] = int(record.get("reconciliations", 0)) + 1
         entry = {"n": record["reconciliations"], "at": _now_iso(), "by": caller,
                  "verdict": verdict, "quote": quote, "reason": reason}
+        # The total count in record["reconciliations"] is exact and never trimmed; the log keeps
+        # only the most recent MAX_LOG entries, so it is a bounded recent-history log, not unbounded.
         log = list(record.get("log", []))
         log.append(entry)
         if len(log) > MAX_LOG:
